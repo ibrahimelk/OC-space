@@ -5,9 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "openml",
     "dtai-veritas==0.2.3",
     "fsspec[sftp]>=2025.10.0",
-    "gurobipy>=12.0.3",
+    "gurobipy>=12.0.1",
     "numba>=0.60.0",
     "numcodecs>=0.12.1",
     "numpy<2.0.0",
@@ -22,6 +23,10 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["depth_first_ocenum", "util", "verification"]
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

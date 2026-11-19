@@ -5,6 +5,9 @@ import prada
 import numpy as np
 import numba
 
+from visual import *
+from line_profiler import profile
+
 import numpy as np
 import zarr
 import fsspec
@@ -44,9 +47,8 @@ class DiskSaver:
         mapper = fsspec.get_mapper(filename, **self.storage_options)
         self.root = zarr.open_group(store=mapper, mode="w")
 
-        # feature metadata (small → safe in attrs)
-        if "feat_map" not in self.root.attrs:
-            self.root.attrs["feat_map"] = feat_map.tolist()
+        # feature metadata (small → safe in attrs) if "feat_map" not in self.root.attrs:
+        self.root.attrs["feat_map"] = feat_map.tolist()
 
         self.root.attrs.setdefault("num_solutions", 0)
         self.root.attrs.setdefault("num_shards", 0)
@@ -270,13 +272,30 @@ def enumerate_ocs_recursive(nboxes, tree_index, outvalue):
         print(ws0, "→", outvalue)
 
 
+# TODO(Ibrahim):
+# this is important to understand, why a DFS search ? isn't there a better way
+# to know which leaf tuples would be in oc. it should be in O(1), once you
+# traverse the trees in a single way down. like you stack all the trees on top
+# of the ensembles, and at the same time of the root down. not sure if
+# possible, and what kind of optimisation this would be.
+
+# NOTE(Ibrahim):
+# basically a DFS,
+# [tree-index 0], [leaf 0],
+# then
+# [tree-index 0], [leaf 0]; [tree-index 1], [leaf 0],
+# then
+# [tree-index 0], [leaf 0]; [tree-index 1], [leaf 0]; [tree-index 2], [leaf 0] (UNSATISFIED)
+# then
+# [tree-index 0], [leaf 0]; [tree-index 1], [leaf 0]; [tree-index 2], [leaf 1]
+# etc.
 @numba.njit
 def enumerate_ocs_stack(nboxes, tree_index, box_buffer, outvalue_buffer):
     buffer_index = 0
     num_trees = nboxes.num_trees()
     while buffer_index < box_buffer.shape[0]:
         if tree_index >= num_trees:
-            print("fail")
+            # print("fail")
             break
 
         ws0 = nboxes._workspace[tree_index, :, :]
@@ -293,7 +312,8 @@ def enumerate_ocs_stack(nboxes, tree_index, box_buffer, outvalue_buffer):
             nboxes._lids[tree_index] = 0  # start over again with this tree in the next round
             tree_index -= 1  # backtrack to previous tree
             continue
-
+        
+        # NOTE(Ibrahim): next leaf to consider in this tree once back to this tree
         nboxes._lids[tree_index] += 1
 
         if overlaps(ws0[0, :], ws0[1, :], los[lid, :], his[lid, :]):
@@ -323,9 +343,15 @@ def get_feat_map(at: veritas.AddTree):
         feat_map[fid] = i
     return feat_map, num_feats
 
-
+@profile
 def enumerate_ocs(at: veritas.AddTree, buffer_size: int, feat_map: np.ndarray = None, timeout: int = None):
     
+    # NOTE(Ibrahim)
+    # when using get_feat_map, it returns the feature for which there was a split
+    # so num_feats, is actually, num_feats_splitted
+    #
+    # NOTE(Ibrahim):
+    # feat_map maps feat_id to idx in los/his (rows of leaves and columns feats)
     if feat_map is None:
         feat_map, num_feats = get_feat_map(at)
     else:
@@ -333,15 +359,31 @@ def enumerate_ocs(at: veritas.AddTree, buffer_size: int, feat_map: np.ndarray = 
     boxes = AddTreeBoxes(at, feat_map)
 
     # Define the boxes of all leaves on every tree
+    # NOTE(Ibrahim):
+    # damn, every leaf huh...
+
     for m, t in enumerate(at):
         leaf_ids = t.get_leaf_ids()
         num_leaves = len(leaf_ids)
+
+        # NOTE(Ibrahim):
+        # t.get_leaf_value(lid, 0), i.e.
+        # all trees are only scalar predictors. R^d -> R or R^d -> {0,1}
+        # what about R^d -> R^n ?
+
         # Keep track of the leaf values as well
         lvals = np.array([t.get_leaf_value(lid, 0) for lid in leaf_ids], dtype=np.float32)
         los = np.full((num_leaves, num_feats), -np.inf, dtype=np.float32)
         his = np.full_like(los, np.inf)
 
         for i, lid in enumerate(leaf_ids):
+            # NOTE(Ibrahim):
+            # compute_box returns a bool, assuming 1 is success and 0 is a fail
+            # TODO(Ibrahim):
+            # compute boxes for each leaf, why not compute box root down ?
+            # too complex in veritas ? or no big optimisation ?
+            # TODO(Ibrahim):
+            # why not parralize, even across trees (multiple trees)
             box = t.compute_box(lid)
             for fid, ival in box.items():
                 los[i, feat_map[fid]] = ival.lo
@@ -357,7 +399,6 @@ def enumerate_ocs(at: veritas.AddTree, buffer_size: int, feat_map: np.ndarray = 
     tree_index = 0
     box_buffer = np.zeros((buffer_size, 2, num_feats), dtype=np.float32)
     outvalue_buffer = np.zeros(buffer_size, dtype=np.float32)
-    nboxes.reset_workspace()
 
 
     enumerable = False

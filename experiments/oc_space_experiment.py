@@ -7,6 +7,8 @@ resource.setrlimit(resource.RLIMIT_AS, (100*1024*1024*1024, 100*1024*1024*1024))
 import click
 import os
 
+from visual import *
+
 import veritas
 import numpy as np
 import random
@@ -91,6 +93,9 @@ def list_pareto_models_cmd(compressed_file, save_directory, seed, silent):
                         '--max-depth', int(model.max_depth),
                         '--n-estimators', int(model.n_estimators))
 
+# NOTE(Ibrahim)
+# Important starting point
+# example: python3 experiments/oc_space_experiment.py enumerate_model Adult --models_file data/raw/main_paper_compression.txt --save_directory ./data/models --seed 5823 --fold 0 --learning-rate 0.5 --max-depth 4 --n-estimators 10
 @cli.command('enumerate_model')
 @click.argument("dname")
 @click.option("--models_file", required=True)
@@ -182,6 +187,9 @@ def list_enumerated_models_cmd(enumerations_file, models_file):
     
         
 
+# NOTE(Ibrahim)
+# Second important starting point
+# exmaple: python3 experiments/oc_space_experiment.py verify_model ./data/models/OC_enum_Adult_10_4_0.5_fold0_20260915_133348.zarr --models_file data/raw/main_paper_compression.txt --dname Adult --fold 0 --learning-rate 0.5 --max-depth 4 --n-estimators 10
 @cli.command('verify_model')
 @click.argument("oc_file")
 @click.option("--models_file", required=True)
