@@ -5,8 +5,8 @@ import prada
 import numpy as np
 import numba
 
-from visual import *
-from line_profiler import profile
+# from visual import *
+# from line_profiler import profile
 
 import numpy as np
 import zarr
@@ -343,7 +343,7 @@ def get_feat_map(at: veritas.AddTree):
         feat_map[fid] = i
     return feat_map, num_feats
 
-@profile
+# @profile
 def enumerate_ocs(at: veritas.AddTree, buffer_size: int, feat_map: np.ndarray = None, timeout: int = None):
     
     # NOTE(Ibrahim)
